@@ -1,0 +1,50 @@
+MÔI TRƯỜNG: bản express_buggy chạy cổng 8081, DB campus_food_express_buggy (dữ liệu mẫu: SP1 Cơm gà xối mỡ 35.000đ; user id=1)
+
+--- [F-01] Áp mã SV2026 cho đơn 2 x 35.000 = 70.000 → kỳ vọng giảm 7.000, tổng 63.000
+REQUEST : POST /orders  body={"userId": 1, "deliveryLocation": "Ký túc xá A", "note": "giao nhanh", "paymentMethod": "COD", "couponCode": "SV2026", "items": [{"productId": 1, "quantity": 2}]}
+RESPONSE: HTTP 200 (0.3s)  {"success":true,"message":"Đặt hàng thành công!","data":{"id":1,"userId":1,"deliveryLocation":"Ký túc xá A","note":"giao nhanh","paymentMethod":"COD","subtotal":70000.00,"discountAmount":700.00,"totalAmount":69300.00,"status":"Đang xử lý","createdAt":null,"orderItems":[{"id":1,"product":{"id":1,"category":{"id":1,"name":"Cơm"},"name":"Cơm gà xối mỡ","price":35000.00,"imageUrl":"/images/com-ga.jpg","description":"Cơm 
+
+--- [F-02] Tạo đơn rồi chuyển trạng thái "Đang giao" (giả lập bếp) và thử hủy → kỳ vọng bị từ chối
+REQUEST : POST /orders  body={"userId": 1, "deliveryLocation": "Ký túc xá A", "note": "giao nhanh", "paymentMethod": "COD", "couponCode": null, "items": [{"productId": 1, "quantity": 2}]}
+RESPONSE: HTTP 200 (0.01s)  {"success":true,"message":"Đặt hàng thành công!","data":{"id":2,"userId":1,"deliveryLocation":"Ký túc xá A","note":"giao nhanh","paymentMethod":"COD","subtotal":70000.00,"discountAmount":0,"totalAmount":70000.00,"status":"Đang xử lý","createdAt":null,"orderItems":[{"id":2,"product":{"id":1,"category":{"id":1,"name":"Cơm"},"name":"Cơm gà xối mỡ","price":35000.00,"imageUrl":"/images/com-ga.jpg","description":"Cơm giòn 
+
+--- [F-02] Hủy đơn #2 đang ở trạng thái "Đang giao"
+REQUEST : PUT /orders/2/cancel?userId=1
+RESPONSE: HTTP 200 (0.05s)  {"success":true,"message":"Hủy đơn hàng thành công!","data":{"id":2,"userId":1,"deliveryLocation":"Ký túc xá A","note":"giao nhanh","paymentMethod":"COD","subtotal":70000.00,"discountAmount":0.00,"totalAmount":70000.00,"status":"Đã hủy","createdAt":"2026-11-11T16:20:05","orderItems":[{"id":2,"product":{"id":1,"category":{"id":1,"name":"Cơm"},"name":"Cơm gà xối mỡ","price":35000.00,"imageUrl":"/images/com-ga.jpg","des
+
+--- [F-03] Đăng ký email không thuộc @edu.vn/@vju.ac.vn: hacker@gmail.com.edu.vn → kỳ vọng 400 (VAL-EMAIL-01)
+REQUEST : POST /auth/register  body={"fullName": "Test A", "email": "hacker@gmail.com.edu.vn", "phone": "0900000001", "password": "123456"}
+RESPONSE: HTTP 400 (0.05s)  {"success":false,"message":"could not execute statement [Check constraint 'chk_email_domain' is violated.] [insert into users (email,full_name,password,phone) values (?,?,?,?)]; SQL [insert into users (email,full_name,password,phone) values (?,?,?,?)]; constraint [chk_email_domain]","data":null}
+
+--- [F-03b] Đăng ký email x@notedu.vn → kỳ vọng 400
+REQUEST : POST /auth/register  body={"fullName": "Test B", "email": "x@notedu.vn", "phone": "0900000002", "password": "123456"}
+RESPONSE: HTTP 400 (0.03s)  {"success":false,"message":"could not execute statement [Check constraint 'chk_email_domain' is violated.] [insert into users (email,full_name,password,phone) values (?,?,?,?)]; SQL [insert into users (email,full_name,password,phone) values (?,?,?,?)]; constraint [chk_email_domain]","data":null}
+
+--- [F-04] Đặt 100 phần/món → kỳ vọng 400 "Số lượng tối đa là 99" (BUS-CART-01)
+REQUEST : POST /orders  body={"userId": 1, "deliveryLocation": "Ký túc xá A", "note": "giao nhanh", "paymentMethod": "COD", "couponCode": null, "items": [{"productId": 1, "quantity": 100}]}
+RESPONSE: HTTP 500 (0.05s)  {"timestamp":"2026-11-11T02:20:06.104Z","status":500,"error":"Internal Server Error","path":"/api/orders"}
+
+--- [F-05] Đăng ký trùng SĐT 0123456789 (đã có user 1), email mới → kỳ vọng ERR-AUTH-02
+REQUEST : POST /auth/register  body={"fullName": "Trung SDT", "email": "moi@vju.ac.vn", "phone": "0123456789", "password": "123456"}
+RESPONSE: HTTP 400 (0.03s)  {"success":false,"message":"could not execute statement [Duplicate entry '0123456789' for key 'users.phone'] [insert into users (email,full_name,password,phone) values (?,?,?,?)]; SQL [insert into users (email,full_name,password,phone) values (?,?,?,?)]; constraint [users.phone]","data":null}
+
+--- [F-06] Lọc danh mục "Cơm" (categoryId=1) → kỳ vọng chỉ món thuộc Cơm
+REQUEST : GET /products?categoryId=1
+RESPONSE: [('Bún bò Huế', 'Bún/Phở'), ('Phở bò tái chín', 'Bún/Phở'), ('Trà sữa trân châu', 'Đồ uống'), ('Cà phê muối', 'Đồ uống'), ('Bánh mì que', 'Ăn vặt'), ('Xoài dầm muối ớt', 'Ăn vặt')] 
+
+--- [Cr-01] Đặt hàng QR Demo, ghi chú để trống → kỳ vọng 200 (hoặc 400 có thông báo), không được lỗi server
+REQUEST : POST /orders  body={"userId": 1, "deliveryLocation": "Ký túc xá A", "note": "", "paymentMethod": "QR Demo", "couponCode": null, "items": [{"productId": 1, "quantity": 2}]}
+RESPONSE: HTTP 500 (0.03s)  {"timestamp":"2026-11-11T02:20:06.215Z","status":500,"error":"Internal Server Error","path":"/api/orders"}
+
+--- [Cr-02] Sắp xếp "Giá: Cao đến Thấp" (sortBy=desc) → kỳ vọng danh sách giảm dần
+REQUEST : GET /products?sortBy=desc
+RESPONSE: HTTP 500 (0.03s)  {"timestamp":"2026-11-11T02:20:06.246Z","status":500,"error":"Internal Server Error","path":"/api/products"}
+
+--- [C-01] Đăng nhập email chưa tồn tại → kỳ vọng ERR-AUTH-01 "Email hoặc mật khẩu không chính xác"
+REQUEST : POST /auth/login  body={"email": "khongco@vju.ac.vn", "password": "abcdef"}
+RESPONSE: HTTP 400 (0.03s)  {"success":false,"message":"Tài khoản không tồn tại","data":null}
+
+--- [P-01] Tìm kiếm Unicode tiếng Việt → kỳ vọng < 2s (NFR-PERF-01)
+REQUEST : GET /products?keyword=pho   -> HTTP 200 trong 0.03s
+REQUEST : GET /products?keyword=phở   -> HTTP 200 trong 3.03s  (vượt ngưỡng 2s)
+

@@ -1,0 +1,52 @@
+### Test API Đăng ký sinh viên (Thành công)
+POST http://localhost:8080/api/auth/register
+Content-Type: application/json
+
+{
+  "fullName": "Nguyễn Văn A",
+  "email": "nva@vju.ac.vn",
+  "phone": "0987654321",
+  "password": "password123"
+}
+
+### Test API Đăng nhập (Thành công)
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "nva@vju.ac.vn",
+  "password": "password123"
+}
+### 1. Lấy danh sách danh mục món ăn
+GET http://localhost:8080/api/products/categories
+
+### 2. Lấy toàn bộ danh sách món ăn
+GET http://localhost:8080/api/products
+
+### 3. Tìm kiếm món ăn theo từ khóa "cơm"
+GET http://localhost:8080/api/products?keyword=cơm
+
+### 4. Lọc theo danh mục (Ví dụ: categoryId = 1 là Cơm) và sắp xếp giá giảm dần
+GET http://localhost:8080/api/products?categoryId=1&sortBy=desc
+
+### 1. Test Tạo đơn hàng thành công (Có áp mã SV2026)
+POST http://localhost:8080/api/orders
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "deliveryLocation": "Ký túc xá A",
+  "note": "Giao giờ ra chơi 10h15",
+  "paymentMethod": "COD",
+  "couponCode": "SV2026",
+  "items": [
+    { "productId": 1, "quantity": 2 },
+    { "productId": 5, "quantity": 1 }
+  ]
+}
+
+### 2. Xem lịch sử đơn hàng của User ID = 1
+GET http://localhost:8080/api/orders/user/1
+
+### 3. Test Hủy đơn hàng vừa tạo (Thay ID đơn hàng của bạn vào đây, ví dụ Order ID = 1)
+PUT http://localhost:8080/api/orders/1/cancel?userId=1

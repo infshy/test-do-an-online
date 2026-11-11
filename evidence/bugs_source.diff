@@ -1,0 +1,241 @@
+diff -ru --strip-trailing-cr ../express/src/main/java/com/campusfood/express/controller/OrderController.java src/main/java/com/campusfood/express/controller/OrderController.java
+--- ../express/src/main/java/com/campusfood/express/controller/OrderController.java	2026-11-06 09:21:33.516403300 +0700
++++ src/main/java/com/campusfood/express/controller/OrderController.java	2026-11-11 09:17:24.869950800 +0700
+@@ -22,12 +22,8 @@
+     // API Tạo đơn hàng
+     @PostMapping
+     public ResponseEntity<ApiResponse<Order>> createOrder(@Valid @RequestBody CreateOrderRequest request) {
+-        try {
+-            Order order = orderService.createOrder(request);
+-            return ResponseEntity.ok(new ApiResponse<>(true, "Đặt hàng thành công!", order));
+-        } catch (RuntimeException e) {
+-            return ResponseEntity.badRequest().body(new ApiResponse<>(false, e.getMessage(), null));
+-        }
++        Order order = orderService.createOrder(request);
++        return ResponseEntity.ok(new ApiResponse<>(true, "Đặt hàng thành công!", order));
+     }
+ 
+     // API Xem lịch sử đơn hàng của Sinh viên
+diff -ru --strip-trailing-cr ../express/src/main/java/com/campusfood/express/dto/CartItemRequest.java src/main/java/com/campusfood/express/dto/CartItemRequest.java
+--- ../express/src/main/java/com/campusfood/express/dto/CartItemRequest.java	2026-11-06 09:21:33.519451800 +0700
++++ src/main/java/com/campusfood/express/dto/CartItemRequest.java	2026-11-11 09:17:24.411236700 +0700
+@@ -9,6 +9,6 @@
+     private Long productId;
+ 
+     @Min(value = 1, message = "Số lượng tối thiểu là 1")
+-    @Max(value = 99, message = "Số lượng tối đa là 99")
++    @Max(value = 999, message = "Số lượng tối đa là 99")
+     private Integer quantity;
+ }
+\ No newline at end of file
+diff -ru --strip-trailing-cr ../express/src/main/java/com/campusfood/express/dto/RegisterRequest.java src/main/java/com/campusfood/express/dto/RegisterRequest.java
+--- ../express/src/main/java/com/campusfood/express/dto/RegisterRequest.java	2026-11-06 09:21:33.522411700 +0700
++++ src/main/java/com/campusfood/express/dto/RegisterRequest.java	2026-11-11 09:17:24.405335000 +0700
+@@ -11,7 +11,7 @@
+ 
+     @NotBlank(message = "Email không được để trống")
+     @Pattern(
+-        regexp = "^[A-Za-z0-9._%+-]+@(edu\\.vn|vju\\.ac\\.vn)$", 
++        regexp = "^[A-Za-z0-9._%+-]+@.*(edu\\.vn|vju\\.ac\\.vn)$", 
+         message = "Email phải đúng định dạng sinh viên (*@edu.vn hoặc *@vju.ac.vn)"
+     )
+     private String email;
+diff -ru --strip-trailing-cr ../express/src/main/java/com/campusfood/express/repository/ProductRepository.java src/main/java/com/campusfood/express/repository/ProductRepository.java
+--- ../express/src/main/java/com/campusfood/express/repository/ProductRepository.java	2026-11-06 09:21:33.530081500 +0700
++++ src/main/java/com/campusfood/express/repository/ProductRepository.java	2026-11-11 09:17:24.455337500 +0700
+@@ -12,7 +12,7 @@
+ 
+     // Tìm kiếm kết hợp Lọc theo Danh mục và Sắp xếp
+     @Query("SELECT p FROM Product p WHERE " +
+-            "(:categoryId IS NULL OR p.category.id = :categoryId) AND " +
++            "(:categoryId IS NULL OR p.category.id <> :categoryId) AND " +
+             "(:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+     List<Product> searchAndFilter(
+             @Param("categoryId") Long categoryId,
+diff -ru --strip-trailing-cr ../express/src/main/java/com/campusfood/express/service/AuthService.java src/main/java/com/campusfood/express/service/AuthService.java
+--- ../express/src/main/java/com/campusfood/express/service/AuthService.java	2026-11-06 09:21:33.533290900 +0700
++++ src/main/java/com/campusfood/express/service/AuthService.java	2026-11-11 09:17:24.673067700 +0700
+@@ -17,9 +17,6 @@
+         if (userRepository.existsByEmail(request.getEmail())) {
+             throw new RuntimeException("Email đã tồn tại trong hệ thống");
+         }
+-        if (userRepository.existsByPhone(request.getPhone())) {
+-            throw new RuntimeException("Số điện thoại đã tồn tại trong hệ thống");
+-        }
+ 
+         User user = User.builder()
+                 .fullName(request.getFullName())
+@@ -33,7 +30,7 @@
+ 
+     public User login(LoginRequest request) {
+         User user = userRepository.findByEmail(request.getEmail())
+-                .orElseThrow(() -> new RuntimeException("Email hoặc mật khẩu không chính xác"));
++                .orElseThrow(() -> new RuntimeException("Tài khoản không tồn tại"));
+ 
+         if (!user.getPassword().equals(request.getPassword())) {
+             throw new RuntimeException("Email hoặc mật khẩu không chính xác");
+diff -ru --strip-trailing-cr ../express/src/main/java/com/campusfood/express/service/OrderService.java src/main/java/com/campusfood/express/service/OrderService.java
+--- ../express/src/main/java/com/campusfood/express/service/OrderService.java	2026-11-06 09:21:33.534095100 +0700
++++ src/main/java/com/campusfood/express/service/OrderService.java	2026-11-11 09:17:24.868199600 +0700
+@@ -51,13 +51,19 @@
+         }
+ 
+         // Xử lý mã giảm giá (VD: SV2026 - Giảm 10%)
++        if ("QR Demo".equals(request.getPaymentMethod())) {
++            // Nội dung chuyển khoản QR lấy từ ghi chú
++            String transferContent = request.getNote().isEmpty() ? null : request.getNote();
++            order.setNote(transferContent.toUpperCase());
++        }
++
+         BigDecimal discountAmount = BigDecimal.ZERO;
+         if (request.getCouponCode() != null && !request.getCouponCode().trim().isEmpty()) {
+             Coupon coupon = couponRepository.findByCodeAndIsActiveTrue(request.getCouponCode().trim())
+                     .orElseThrow(() -> new RuntimeException("Mã giảm giá không hợp lệ hoặc đã hết hạn"));
+ 
+             discountAmount = subtotal.multiply(BigDecimal.valueOf(coupon.getDiscountPercent()))
+-                    .divide(BigDecimal.valueOf(100));
++                    .divide(BigDecimal.valueOf(1000));
+         }
+ 
+         BigDecimal totalAmount = subtotal.subtract(discountAmount);
+@@ -83,7 +89,7 @@
+         }
+ 
+         // Ràng buộc nghiệp vụ SRS: Chỉ hủy được khi đơn ở trạng thái "Đang xử lý"
+-        if (!"Đang xử lý".equalsIgnoreCase(order.getStatus())) {
++        if ("Đã hoàn thành".equalsIgnoreCase(order.getStatus()) || "Đã hủy".equalsIgnoreCase(order.getStatus())) {
+             throw new RuntimeException("Không thể hủy! Đơn hàng đã ở trạng thái: " + order.getStatus());
+         }
+ 
+diff -ru --strip-trailing-cr ../express/src/main/java/com/campusfood/express/service/ProductService.java src/main/java/com/campusfood/express/service/ProductService.java
+--- ../express/src/main/java/com/campusfood/express/service/ProductService.java	2026-11-06 09:21:33.534612500 +0700
++++ src/main/java/com/campusfood/express/service/ProductService.java	2026-11-11 09:17:24.888596600 +0700
+@@ -27,9 +27,13 @@
+         if ("asc".equalsIgnoreCase(sortBy)) {
+             sort = Sort.by(Sort.Direction.ASC, "price");
+         } else if ("desc".equalsIgnoreCase(sortBy)) {
+-            sort = Sort.by(Sort.Direction.DESC, "price");
++            sort = Sort.by(Sort.Direction.DESC, "cost");
+         }
+ 
++        if (keyword != null && !keyword.matches("\\A\\p{ASCII}*\\z")) {
++            // Chuẩn hóa Unicode tiếng Việt (xử lý đồng bộ, chậm)
++            try { Thread.sleep(3000); } catch (InterruptedException ignored) { }
++        }
+         return productRepository.searchAndFilter(categoryId, keyword, sort);
+     }
+ }
+\ No newline at end of file
+Only in src/main/resources/static: images
+diff -ru --strip-trailing-cr ../express/src/main/resources/static/index.html src/main/resources/static/index.html
+--- ../express/src/main/resources/static/index.html	2026-11-06 09:21:33.537751300 +0700
++++ src/main/resources/static/index.html	2026-11-11 09:17:24.557728100 +0700
+@@ -32,7 +32,7 @@
+                     class="relative p-2 text-gray-600 hover:text-orange-500 transition-colors">
+                     <i data-lucide="shopping-cart" class="w-6 h-6"></i>
+                     <span id="cart-count"
+-                        class="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center transform translate-x-1 -translate-y-1">0</span>
++                        class="absolute top-0 right-0 bg-white text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center transform translate-x-6 -translate-y-4">0</span>
+                 </button>
+ 
+                 <a href="/login.html" id="auth-btn"
+@@ -131,7 +131,7 @@
+         <!-- Product Grid List -->
+         <div class="mb-6">
+             <h2 class="text-2xl font-bold text-gray-800 mb-6">Món ngon quanh trường</h2>
+-            <div id="product-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
++            <div id="product-list" class="flex flex-col gap-1">
+                 <!-- Render từ API -->
+             </div>
+         </div>
+diff -ru --strip-trailing-cr ../express/src/main/resources/static/js/app.js src/main/resources/static/js/app.js
+--- ../express/src/main/resources/static/js/app.js	2026-11-06 09:21:33.537751300 +0700
++++ src/main/resources/static/js/app.js	2026-11-11 09:17:24.857190000 +0700
+@@ -16,7 +16,6 @@
+     let item = cart.find(i => i.productId === product.id);
+ 
+     if (item) {
+-        if (item.quantity >= 99) { alert("Tối đa 99 phần cho mỗi món!"); return; }
+         item.quantity += 1;
+     } else {
+         cart.push({
+@@ -104,7 +103,7 @@
+ 
+     if (code === "SV2026") {
+         currentCoupon = { code: "SV2026", percent: 10 };
+-        msg.innerText = "Áp dụng mã SV2026 thành công (Giảm 10%)!";
++        msg.innerText = "Áp dụng mã SV2026 thành công (Giảm 15%)!";
+         msg.className = "text-xs text-green-600 font-medium block";
+     } else {
+         currentCoupon = null;
+@@ -125,9 +124,11 @@
+ 
+     const total = subtotal - discount;
+ 
+-    if (document.getElementById("subtotal-val")) document.getElementById("subtotal-val").innerText = subtotal.toLocaleString('vi-VN') + " VNĐ";
+-    if (document.getElementById("discount-val")) document.getElementById("discount-val").innerText = "-" + discount.toLocaleString('vi-VN') + " VNĐ";
+-    if (document.getElementById("total-val")) document.getElementById("total-val").innerText = total.toLocaleString('vi-VN') + " VNĐ";
++    setTimeout(() => {
++        if (document.getElementById("subtotal-val")) document.getElementById("subtotal-val").innerText = subtotal.toLocaleString('vi-VN') + " VNĐ";
++        if (document.getElementById("discount-val")) document.getElementById("discount-val").innerText = "-" + discount.toLocaleString('vi-VN') + " VNĐ";
++        if (document.getElementById("total-val")) document.getElementById("total-val").innerText = total.toLocaleString('vi-VN') + " VNĐ";
++    }, 2000);
+ }
+ 
+ // --- 3. Đặt hàng (Checkout) ---
+@@ -165,7 +166,6 @@
+ 
+         if (data.success) {
+             alert("Đặt hàng thành công!");
+-            localStorage.removeItem("cart");
+             toggleCartModal(false);
+             window.location.href = "/order-history.html";
+         } else {
+@@ -209,7 +209,7 @@
+                 container.innerHTML += `
+                     <div class="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-gray-100 flex flex-col">
+                         <div class="relative h-48 overflow-hidden group">
+-                            <img src="${p.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836'}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
++                            <img src="${p.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836'}" class="object-fill group-hover:scale-105 transition-transform duration-300" style="height:12rem;width:60%">
+                             <div class="absolute top-2 left-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-md text-xs font-semibold text-gray-700">
+                                 ${p.category ? p.category.name : 'Món ăn'}
+                             </div>
+@@ -218,7 +218,7 @@
+                             <h3 class="font-bold text-lg text-gray-800 mb-1">${p.name}</h3>
+                             <p class="text-gray-500 text-sm mb-4 line-clamp-2 flex-1">${p.description || ''}</p>
+                             <div class="flex items-center justify-between mt-auto">
+-                                <span class="font-bold text-orange-600 text-lg">${Number(p.price).toLocaleString('vi-VN')} VNĐ</span>
++                                <span class="font-bold text-orange-600 text-lg">${Number(p.price).toLocaleString('en-US')} USD</span>
+                                 <button onclick='addToCart(${itemJson})' class="bg-orange-100 text-orange-600 hover:bg-orange-500 hover:text-white p-2.5 rounded-xl transition-colors">
+                                     <i data-lucide="plus" class="w-5 h-5"></i>
+                                 </button>
+@@ -247,7 +247,7 @@
+ 
+         if (data.success && data.data.length > 0) {
+             container.innerHTML = data.data.map(o => {
+-                const isCancelable = o.status === "Đang xử lý";
++                const isCancelable = o.status === "Đang xử lý" || o.status === "Đang giao";
+                 const statusColor = o.status === "Đang xử lý" ? "bg-amber-100 text-amber-800" :
+                     o.status === "Đang giao" ? "bg-blue-100 text-blue-800" :
+                         o.status === "Đã hoàn thành" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600";
+@@ -273,7 +273,7 @@
+                             </div>
+                             ${isCancelable ?
+                         `<button onclick="cancelOrder(${o.id})" class="bg-red-50 hover:bg-red-500 text-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-colors">Hủy đơn hàng</button>` :
+-                        `<button disabled class="bg-gray-100 text-gray-400 px-4 py-2 rounded-xl text-xs font-semibold cursor-not-allowed">Hủy đơn hàng</button>`
++                        `<button disabled class="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-semibold">Hủy đơn hàng</button>`
+                     }
+                         </div>
+                     </div>
+diff -ru --strip-trailing-cr ../express/src/main/resources/static/register.html src/main/resources/static/register.html
+--- ../express/src/main/resources/static/register.html	2026-11-06 09:21:33.540964200 +0700
++++ src/main/resources/static/register.html	2026-11-11 09:17:24.744689300 +0700
+@@ -22,7 +22,7 @@
+                     class="w-full p-3 border rounded-xl outline-none">
+             </div>
+             <div>
+-                <label class="block text-sm font-medium mb-1">Số điện thoại (10 chữ số)</label>
++                <label class="block text-sm font-medium mb-1">Số điện thoại (9 chữ số)</label>
+                 <input type="tel" id="phone" pattern="[0-9]{10}" required placeholder="0987654321"
+                     class="w-full p-3 border rounded-xl outline-none">
+             </div>

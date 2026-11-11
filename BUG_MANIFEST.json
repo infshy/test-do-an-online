@@ -1,0 +1,327 @@
+{
+  "meta": {
+    "project": "Campus Food Express (bản có lỗi cài sẵn: code/express_buggy)",
+    "baseline": "code/express (bản gốc, không sửa)",
+    "srs": "02_SRS.docx v1.1",
+    "total": 19,
+    "by_type": {
+      "Functional": 7,
+      "Visual": 4,
+      "Content": 4,
+      "Performance": 2,
+      "Crash": 2
+    },
+    "by_severity": {
+      "Critical": 2,
+      "Major": 10,
+      "Minor": 7
+    },
+    "quota": {
+      "Functional": ">=5",
+      "Visual": ">=3",
+      "Content": ">=3",
+      "Performance": ">=2",
+      "Crash": ">=2",
+      "Critical+Major": ">=3"
+    }
+  },
+  "bugs": [
+    {
+      "id": "F-01",
+      "type": "Functional",
+      "severity": "Critical",
+      "title": "Mã SV2026 chỉ giảm 1% ở backend thay vì 10%",
+      "srs_requirement": "BUS-COUPON / FR-CART-02 (UC-ORDER-01): mã SV2026 giảm 10%",
+      "location": "src/main/java/com/campusfood/express/service/OrderService.java:66 (chia 1000 thay vì 100)",
+      "steps": "1) Gọi POST /api/orders với couponCode=SV2026, 2 x Cơm gà xối mỡ (70.000đ). 2) Xem discountAmount/totalAmount.",
+      "expected": "discountAmount = 7.000; totalAmount = 63.000",
+      "actual": "discountAmount = 700; totalAmount = 69.300. UI giỏ hàng vẫn hiện giảm 10% nên số tiền hiển thị khác số tiền lưu đơn.",
+      "evidence": [
+        "evidence/api_repro_log.txt [F-01]",
+        "evidence/bugs_source.diff",
+        "evidence/shot_order_history.png (đơn #1 Tổng 69.300 VNĐ)"
+      ],
+      "verification": "Chạy thật"
+    },
+    {
+      "id": "F-02",
+      "type": "Functional",
+      "severity": "Major",
+      "title": "Cho phép hủy đơn ở trạng thái \"Đang giao\"",
+      "srs_requirement": "DIS-BTN-CANCEL / UC-ORDER-02 (luồng thay thế) / FR-ORDER-03: chỉ hủy được khi \"Đang xử lý\"",
+      "location": "src/main/java/com/campusfood/express/service/OrderService.java:92 ; src/main/resources/static/js/app.js:250",
+      "steps": "1) Có đơn trạng thái \"Đang giao\". 2) Mở Lịch sử đơn hàng: nút Hủy sáng. 3) Bấm Hủy (hoặc PUT /api/orders/{id}/cancel?userId=1).",
+      "expected": "Nút Hủy bị mờ/ẩn; API từ chối, báo trạng thái không hợp lệ",
+      "actual": "Nút Hủy hoạt động; API trả HTTP 200 \"Hủy đơn hàng thành công\", trạng thái thành \"Đã hủy\".",
+      "evidence": [
+        "evidence/api_repro_log.txt [F-02]",
+        "evidence/shot_order_history.png (đơn #5 Đang giao vẫn có nút Hủy)",
+        "evidence/bugs_source.diff"
+      ],
+      "verification": "Chạy thật"
+    },
+    {
+      "id": "F-03",
+      "type": "Functional",
+      "severity": "Major",
+      "title": "Validate email trường bị lỏng: nhận email có đuôi edu.vn ở bất kỳ vị trí",
+      "srs_requirement": "VAL-EMAIL-01 / FR-AUTH-01: email phải có đuôi @edu.vn hoặc @vju.ac.vn",
+      "location": "src/main/java/com/campusfood/express/dto/RegisterRequest.java:14 (regex thêm \".*\")",
+      "steps": "1) POST /api/auth/register với email hacker@gmail.com.edu.vn (hoặc x@notedu.vn). 2) Quan sát phản hồi.",
+      "expected": "HTTP 400, thông báo \"Email phải đúng định dạng sinh viên (*@edu.vn hoặc *@vju.ac.vn)\"",
+      "actual": "Validate tầng ứng dụng bị vượt qua; request chỉ bị chặn bởi CHECK constraint của DB và trả nguyên văn lỗi SQL \"Check constraint chk_email_domain is violated\" cho người dùng.",
+      "evidence": [
+        "evidence/api_repro_log.txt [F-03], [F-03b]",
+        "evidence/bugs_source.diff"
+      ],
+      "verification": "Chạy thật (biểu hiện bị DB che một phần)"
+    },
+    {
+      "id": "F-04",
+      "type": "Functional",
+      "severity": "Major",
+      "title": "Cho phép số lượng món vượt 99",
+      "srs_requirement": "BUS-CART-01 / Ràng buộc 3.4: số lượng 1-99 mỗi món",
+      "location": "src/main/java/com/campusfood/express/dto/CartItemRequest.java:12 (@Max 999) ; src/main/resources/static/js/app.js:19 (bỏ chặn 99) và :38 (updateQuantity không chặn)",
+      "steps": "1) Thêm món vào giỏ, bấm nút + liên tục quá 99 (hoặc gọi API quantity=100). 2) Xác nhận đặt hàng.",
+      "expected": "Giỏ chặn ở 99; API trả 400 \"Số lượng tối đa là 99\"",
+      "actual": "Giỏ cho phép 100+; API trả HTTP 500 Internal Server Error (CHECK chk_quantity_range của DB chặn), UI báo \"Đặt hàng thất bại: undefined\".",
+      "evidence": [
+        "evidence/api_repro_log.txt [F-04]",
+        "evidence/bugs_source.diff"
+      ],
+      "verification": "Chạy thật (API); UI đối chiếu mã nguồn"
+    },
+    {
+      "id": "F-05",
+      "type": "Functional",
+      "severity": "Major",
+      "title": "Không kiểm tra trùng SĐT khi đăng ký",
+      "srs_requirement": "BUS-AUTH-01 / ERR-AUTH-02: Email & SĐT không được trùng, báo \"Email hoặc Số điện thoại đã tồn tại trong hệ thống\"",
+      "location": "src/main/java/com/campusfood/express/service/AuthService.java:17-19 (đã xóa existsByPhone)",
+      "steps": "1) Đăng ký với SĐT 0123456789 (đã thuộc user 1) và email mới. 2) Quan sát thông báo.",
+      "expected": "Bị chặn bằng thông báo ERR-AUTH-02",
+      "actual": "Qua bước kiểm tra nghiệp vụ, chỉ bị UNIQUE của DB chặn; người dùng thấy nguyên văn lỗi SQL \"Duplicate entry '0123456789' for key users.phone\".",
+      "evidence": [
+        "evidence/api_repro_log.txt [F-05]",
+        "evidence/bugs_source.diff"
+      ],
+      "verification": "Chạy thật"
+    },
+    {
+      "id": "F-06",
+      "type": "Functional",
+      "severity": "Major",
+      "title": "Bộ lọc danh mục trả về món của các danh mục khác",
+      "srs_requirement": "FR-CATALOG-01 / URD 3.3: lọc sản phẩm theo danh mục",
+      "location": "src/main/java/com/campusfood/express/repository/ProductRepository.java:15 (= đổi thành <>)",
+      "steps": "1) Trang chủ, chọn danh mục \"Cơm\" ở ô lọc (hoặc GET /api/products?categoryId=1).",
+      "expected": "Chỉ hiện Cơm gà xối mỡ, Cơm sườn nướng",
+      "actual": "Hiện 6 món thuộc Bún/Phở, Đồ uống, Ăn vặt; không có món Cơm nào.",
+      "evidence": [
+        "evidence/api_repro_log.txt [F-06]",
+        "evidence/bugs_source.diff"
+      ],
+      "verification": "Chạy thật"
+    },
+    {
+      "id": "F-07",
+      "type": "Functional",
+      "severity": "Major",
+      "title": "Đặt hàng thành công nhưng giỏ hàng không được làm rỗng",
+      "srs_requirement": "UC-ORDER-01 bước 5 + Hậu điều kiện: giỏ hàng bị làm trống sau khi đặt hàng thành công",
+      "location": "src/main/resources/static/js/app.js:166-169 (đã xóa localStorage.removeItem(\"cart\"))",
+      "steps": "1) Thêm món, đăng nhập, bấm Xác nhận đặt hàng thành công. 2) Quay lại trang chủ, mở giỏ hàng.",
+      "expected": "Giỏ trống, badge = 0",
+      "actual": "Giỏ vẫn còn nguyên món và badge giữ số cũ; bấm đặt tiếp sẽ tạo đơn trùng.",
+      "evidence": [
+        "evidence/bugs_source.diff (khối app.js @@ -165)"
+      ],
+      "verification": "Đối chiếu mã nguồn"
+    },
+    {
+      "id": "V-01",
+      "type": "Visual",
+      "severity": "Major",
+      "title": "Danh sách món không còn dạng lưới (Grid), xếp thành một cột",
+      "srs_requirement": "NFR 3.1 / URD mục 4: trang chủ dùng Grid layout cho danh sách món",
+      "location": "src/main/resources/static/index.html:134 (grid... đổi thành flex flex-col)",
+      "steps": "1) Mở trang chủ ở màn hình rộng 1280px.",
+      "expected": "Các thẻ món xếp 3 cột",
+      "actual": "Mỗi thẻ chiếm trọn một hàng, trang dài bất thường, nhiều khoảng trắng.",
+      "evidence": [
+        "evidence/shot_index_home.png"
+      ],
+      "verification": "Chạy thật"
+    },
+    {
+      "id": "V-02",
+      "type": "Visual",
+      "severity": "Major",
+      "title": "Badge số lượng giỏ hàng vô hình và lệch khỏi biểu tượng giỏ",
+      "srs_requirement": "NFR 3.1 / URD mục 4: giỏ hàng có badge số lượng hiển thị real-time",
+      "location": "src/main/resources/static/index.html:35 (nền trắng + chữ trắng, translate-x-6 -translate-y-4)",
+      "steps": "1) Thêm 3 sản phẩm vào giỏ. 2) Nhìn biểu tượng giỏ trên thanh điều hướng.",
+      "expected": "Badge đỏ, chữ trắng hiển thị số 3 sát biểu tượng giỏ",
+      "actual": "Không thấy badge (chữ trắng trên nền trắng), vị trí lệch ra ngoài biểu tượng.",
+      "evidence": [
+        "evidence/shot_index_home.png (giỏ có 3 sản phẩm nhưng không có badge)"
+      ],
+      "verification": "Chạy thật"
+    },
+    {
+      "id": "V-03",
+      "type": "Visual",
+      "severity": "Minor",
+      "title": "Ảnh thumbnail món ăn bị méo và chỉ rộng 60% thẻ",
+      "srs_requirement": "URD mục 4: mỗi món có ảnh thumbnail trong lưới",
+      "location": "src/main/resources/static/js/app.js:212 (object-fill, width:60%, height:12rem)",
+      "steps": "1) Mở trang chủ và xem ảnh món ăn.",
+      "expected": "Ảnh phủ kín khung, đúng tỉ lệ (object-cover)",
+      "actual": "Ảnh bị kéo giãn méo, chỉ chiếm 60% bề ngang thẻ, lệch trái.",
+      "evidence": [
+        "evidence/shot_index_home.png"
+      ],
+      "verification": "Chạy thật"
+    },
+    {
+      "id": "V-04",
+      "type": "Visual",
+      "severity": "Minor",
+      "title": "Nút Hủy đơn ở trạng thái bị khóa vẫn hiển thị đỏ như đang hoạt động",
+      "srs_requirement": "DIS-BTN-CANCEL / REQ-08: nút Hủy phải mờ/ẩn khi đơn không ở \"Đang xử lý\"",
+      "location": "src/main/resources/static/js/app.js:276 (class bg-red-50 text-red-600, bỏ cursor-not-allowed)",
+      "steps": "1) Mở Lịch sử đơn hàng có đơn \"Đã hoàn thành\"/\"Đã hủy\".",
+      "expected": "Nút Hủy màu xám mờ, con trỏ cấm",
+      "actual": "Nút Hủy màu đỏ y hệt đơn đang xử lý (chỉ khác là bấm không phản hồi), gây hiểu nhầm.",
+      "evidence": [
+        "evidence/shot_order_history.png (đơn #4 Đã hoàn thành, #2 Đã hủy)"
+      ],
+      "verification": "Chạy thật"
+    },
+    {
+      "id": "C-01",
+      "type": "Content",
+      "severity": "Minor",
+      "title": "Thông báo đăng nhập sai (email không tồn tại) lệch với bảng mã lỗi",
+      "srs_requirement": "ERR-AUTH-01: \"Email hoặc mật khẩu không chính xác\"",
+      "location": "src/main/java/com/campusfood/express/service/AuthService.java:33",
+      "steps": "1) Đăng nhập với email chưa đăng ký.",
+      "expected": "\"Email hoặc mật khẩu không chính xác\"",
+      "actual": "\"Tài khoản không tồn tại\" (đồng thời lộ thông tin email nào đã đăng ký).",
+      "evidence": [
+        "evidence/api_repro_log.txt [C-01]",
+        "evidence/bugs_source.diff"
+      ],
+      "verification": "Chạy thật"
+    },
+    {
+      "id": "C-02",
+      "type": "Content",
+      "severity": "Minor",
+      "title": "Giá món hiển thị bằng USD thay vì VNĐ",
+      "srs_requirement": "Ràng buộc 3.4 / URD mục 4: đơn vị tiền tệ hiển thị là VNĐ",
+      "location": "src/main/resources/static/js/app.js:221 (en-US + \"USD\")",
+      "steps": "1) Mở trang chủ, xem giá trên thẻ món.",
+      "expected": "35.000 VNĐ",
+      "actual": "35,000 USD (trong giỏ hàng vẫn là VNĐ nên không nhất quán).",
+      "evidence": [
+        "evidence/shot_index_home.png"
+      ],
+      "verification": "Chạy thật"
+    },
+    {
+      "id": "C-03",
+      "type": "Content",
+      "severity": "Minor",
+      "title": "Nhãn ô SĐT ghi \"9 chữ số\" trong khi yêu cầu đúng 10 chữ số",
+      "srs_requirement": "Bảng 2-3 SRS: SĐT đúng 10 chữ số",
+      "location": "src/main/resources/static/register.html:25",
+      "steps": "1) Mở trang Đăng ký, đọc nhãn ô SĐT.",
+      "expected": "\"Số điện thoại (10 chữ số)\"",
+      "actual": "\"Số điện thoại (9 chữ số)\", mâu thuẫn với placeholder 0987654321 và pattern 10 số.",
+      "evidence": [
+        "evidence/shot_register.png"
+      ],
+      "verification": "Chạy thật"
+    },
+    {
+      "id": "C-04",
+      "type": "Content",
+      "severity": "Minor",
+      "title": "Thông báo áp mã giảm giá ghi sai mức giảm 15%",
+      "srs_requirement": "BUS-COUPON: mã SV2026 giảm 10%",
+      "location": "src/main/resources/static/js/app.js:106",
+      "steps": "1) Mở giỏ hàng, nhập SV2026, bấm Áp dụng.",
+      "expected": "\"Áp dụng mã SV2026 thành công (Giảm 10%)!\"",
+      "actual": "\"... (Giảm 15%)!\" trong khi số tiền giảm tính theo 10%.",
+      "evidence": [
+        "evidence/bugs_source.diff (khối app.js @@ -104)"
+      ],
+      "verification": "Đối chiếu mã nguồn"
+    },
+    {
+      "id": "P-01",
+      "type": "Performance",
+      "severity": "Major",
+      "title": "Tìm kiếm từ khóa tiếng Việt có dấu mất hơn 3 giây",
+      "srs_requirement": "NFR-PERF-01: tìm kiếm Unicode tiếng Việt trả kết quả < 2s",
+      "location": "src/main/java/com/campusfood/express/service/ProductService.java:35 (Thread.sleep(3000))",
+      "steps": "1) Gõ \"phở\" vào ô tìm kiếm (hoặc GET /api/products?keyword=phở). 2) Đo thời gian.",
+      "expected": "< 2 giây",
+      "actual": "~3,03 giây (từ khóa \"pho\" không dấu chỉ 0,03 giây). Gõ mỗi ký tự có dấu đều bị treo ~3 giây.",
+      "evidence": [
+        "evidence/api_repro_log.txt [P-01]",
+        "evidence/bugs_source.diff"
+      ],
+      "verification": "Chạy thật (đo thời gian)"
+    },
+    {
+      "id": "P-02",
+      "type": "Performance",
+      "severity": "Minor",
+      "title": "Tổng tiền trong giỏ cập nhật trễ 2 giây",
+      "srs_requirement": "NFR-PERF-02: tự động tính tổng tiền realtime, không có độ trễ",
+      "location": "src/main/resources/static/js/app.js:127 (setTimeout 2000 quanh phần cập nhật Tạm tính/Giảm giá/Tổng tiền)",
+      "steps": "1) Mở giỏ hàng, bấm + tăng số lượng hoặc áp mã SV2026. 2) Quan sát dòng Tổng tiền.",
+      "expected": "Tổng tiền đổi ngay lập tức",
+      "actual": "Số lượng đổi ngay nhưng Tạm tính/Giảm giá/Tổng tiền đổi sau ~2 giây, thời gian đó người dùng có thể thấy số cũ và đặt hàng.",
+      "evidence": [
+        "evidence/bugs_source.diff (khối app.js @@ -125)"
+      ],
+      "verification": "Đối chiếu mã nguồn"
+    },
+    {
+      "id": "Cr-01",
+      "type": "Crash",
+      "severity": "Critical",
+      "title": "Đặt hàng bằng QR Demo với ghi chú để trống gây lỗi 500",
+      "srs_requirement": "UC-ORDER-01 / BUS-ORDER: chọn PT thanh toán \"QR Demo\" hợp lệ và đặt hàng thành công; luồng thay thế phải trả cảnh báo, không lỗi server",
+      "location": "src/main/java/com/campusfood/express/service/OrderService.java:56-57 (NPE do transferContent null) ; src/main/java/com/campusfood/express/controller/OrderController.java:25 (bỏ try/catch)",
+      "steps": "1) Thêm món, chọn \"Chuyển khoản QR Demo\", để trống ghi chú. 2) Bấm Xác nhận đặt hàng.",
+      "expected": "Đặt hàng thành công",
+      "actual": "API trả HTTP 500 (NullPointerException), UI báo \"Đặt hàng thất bại: undefined\"; không tạo đơn.",
+      "evidence": [
+        "evidence/api_repro_log.txt [Cr-01]",
+        "evidence/bugs_source.diff"
+      ],
+      "verification": "Chạy thật"
+    },
+    {
+      "id": "Cr-02",
+      "type": "Crash",
+      "severity": "Major",
+      "title": "Sắp xếp \"Giá: Cao đến Thấp\" làm API lỗi 500, danh sách món biến mất",
+      "srs_requirement": "URD 3.3 / FR-CATALOG-01: sắp xếp danh sách món theo giá giảm dần",
+      "location": "src/main/java/com/campusfood/express/service/ProductService.java:30 (sai tên thuộc tính \"cost\")",
+      "steps": "1) Trang chủ, chọn \"Giá: Cao đến Thấp\" (hoặc GET /api/products?sortBy=desc).",
+      "expected": "Danh sách sắp xếp giá giảm dần",
+      "actual": "API trả HTTP 500 (PropertyReferenceException); UI hiện \"Không tìm thấy món ăn nào phù hợp!\" dù có đủ món.",
+      "evidence": [
+        "evidence/api_repro_log.txt [Cr-02]",
+        "evidence/bugs_source.diff"
+      ],
+      "verification": "Chạy thật"
+    }
+  ]
+}
